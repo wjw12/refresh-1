@@ -1,5 +1,5 @@
 {
-  "name": "geo-wave",
+  "name": "refresh-1",
   "version": 2,
   "env": {
       "MONGODB_URI": "@mongodb-uri"
