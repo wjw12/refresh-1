@@ -5,23 +5,109 @@
   <meta charset="utf-8">
 
   <title>Get IP</title>
-  <meta name="description" content="The HTML5 Herald">
-  <meta name="author" content="SitePoint">
+  <meta http-equiv="Page-Enter" content="blendTrans(Duration=0.5)">
+<meta http-equiv="Page-Exit" content="blendTrans(Duration=0.5)">
+<link rel="preload" href="main.js" as="script">
+  
+<!--
+<script src="main.js"></script>
+-->
 
-  <link rel="stylesheet" href="css/styles.css?v=1.0">
+
+<script>
+
+  function rgb2str(c) {
+    return 'rgb(' + Math.floor(c.r) + ',' + Math.floor(c.g) + ',' + Math.floor(c.b) + ')';
+}
+
+function lerp(a, b, t) {
+    if (t > 0 && t < 1) t = 3 * t ** 2 - 2 * t ** 3;
+    return a + (b - a) * t;
+}
+
+function lerpRgb(a, b, t) {
+    return {
+        r: Math.floor(lerp(a.r, b.r, t)),
+        g: Math.floor(lerp(a.g, b.g, t)),
+        b: Math.floor(lerp(a.b, b.b, t))
+    }
+}
+  const lightColor = {r: 204, g: 218, b: 235};
+const darkColor = {r: 18, g: 23, b: 23};
+
+const now = new Date();
+const hour = now.getHours();
+const minute = now.getMinutes();
+const time = hour + minute / 60;
+const toMidnight = Math.min(time, 24 - time);
+const brightness = toMidnight / 12;
+
+//$( document ).ready(function() {
+//    $('#element').css('background-color', rgb2str(lerpRgb(darkColor, lightColor, brightness)));
+//});     
+document.addEventListener("DOMContentLoaded", function(event) { 
+  document.getElementById('element').style.backgroundColor = rgb2str(lerpRgb(darkColor, lightColor, brightness));
+  var usedLaterScript = document.createElement('script');
+  usedLaterScript.src = 'main.js';
+  document.body.appendChild(usedLaterScript)
+});
+
+// $(document).ready(
+//   () => {
+//   document.getElementById('element').style.backgroundColor = rgb2str(lerpRgb(darkColor, lightColor, brightness));
+//   var usedLaterScript = document.createElement('script');
+//   usedLaterScript.src = 'main.js';
+//   document.body.appendChild(usedLaterScript)
+
+// }
+// );
+
+</script>
+
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      width: 100%;
+      overflow:hidden;
+      z-index: -999999;
+    }
+
+    .container {
+      width: 100%;
+      height:100%;
+      border:0;
+      margin:0;
+      position:fixed;
+      top:0;
+      left:0;
+      z-index: 1;
+    }
+
+
+    .element {
+        width: 100%;
+        height: 100%;
+        background-size: 100% 100%;
+      z-index: 1;
+    } 
+
+    #canvas {
+      margin: 0;
+      position: fixed;
+      z-index: 100;
+    }
+  </style>
 
 </head>
 
-<body style="background-color: #b0b0b0;">
- <script src="https://libs.baidu.com/jquery/2.0.0/jquery.min.js"></script>
- <script src="main.js"></script>
+<body>
+<canvas id="canvas"></canvas>
+ 
+ <div class="container">
+  <div class="element" id="element">
+  </div>
+</div>
 
- <br></br>
- <div>
-   <p id="main-text"></p>
- </div>
- <div id="content">
-
- </div>
 </body>
 </html>
