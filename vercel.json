@@ -1,5 +1,5 @@
 {
-  "name": "refresh-1",
+  "name": "time-refresh",
   "version": 2,
   "env": {
       "MONGODB_URI": "@mongodb-uri"

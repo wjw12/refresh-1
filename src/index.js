@@ -69,13 +69,16 @@ let color2str = rgb2str;
 
 // login - post an ip to database
 
+let selfIp = '';
+
 var request = new XMLHttpRequest();
-request.open('GET', 'https://api.ipify.org?format=json', true);
+request.open('GET', 'https://api.ipify.org?format=json', true); // 拿到本地IP
 request.onload = function() {
   if (request.status >= 200 && request.status < 400) {
     // Success!
     var data = JSON.parse(request.responseText);
-    axios.post(baseApi + 'login', {ip: data.ip})
+    selfIp = data.ip;
+    axios.post(baseApi + 'login', {ip: data.ip}) // 调用服务器的API发送给数据库
     .then(
         response => {
             console.log(response.data)
@@ -92,6 +95,8 @@ request.onerror = function() {
 
 request.send();
 
+// 下面是用jQuery发请求的方法，跟上面的request.send 作用一样
+
 // $.getJSON('https://api.ipify.org?format=json', function(data){
 //     axios.post(baseApi + 'login', {ip: data.ip})
 //     .then(
@@ -107,18 +112,21 @@ const height = window.innerHeight;
 
 const maxRay = Math.max(width, height) * 0.1;
 const raySegs = 20;
-const recentN = 10;
+const recentN = 8;
+const numRays = 180;
+const rayLength = Math.max(width, height);
+const overallWidth = width > height ? 1.1 : 0.75; // 区分一下竖屏的手机，手机显示细一点
 
-const refreshInterval = 2000;
-const showTime = 10000;
+const refreshInterval = 2000 + 5000 * Math.random();
+const showTime = 20000;
 const now = Date.now();
 
+// 如果有sessionStorage就从缓存里面读取
 let ipList = sessionStorage.ipList ? JSON.parse(sessionStorage.ipList) : null;
 let locationInfo = sessionStorage.locationInfo ? JSON.parse(sessionStorage.locationInfo) : null;
 let hasCache = locationInfo && locationInfo != [];
 
-
-
+// 旧版 手动渐变
 // const sunLocation = utc / 24 * 100;
 // const moonLocation = repeat(utc - 12, 24) / 24 * 100;
 // const dawnLocation = (sunLocation + moonLocation) / 2;
@@ -170,8 +178,10 @@ let hasCache = locationInfo && locationInfo != [];
         constructor() {
             //this.pos = sk.createVector(width / 2, height / 2);
             this.pos = {x: width / 2, y: height / 2};
+            this.origin = {x: width / 2, y: height / 2};
             this.rays = [];
-            for (let a = 0; a < 360; a += 1) {
+            const delta = 360 / numRays;
+            for (let a = 0; a < 360; a += delta) {
                 this.rays.push(new Ray(this.pos, a / 180.0 * Math.PI));
             }
         }
@@ -183,29 +193,10 @@ let hasCache = locationInfo && locationInfo != [];
             this.rays.forEach((ray) => {ray.pos.x = this.pos.x; ray.pos.y = this.pos.y})
         }
 
-        // look(walls) {
-        //     for (let i = 0; i < this.rays.length; i++) {
-        //     const ray = this.rays[i];
-        //     let closest = null;
-        //     let record = Infinity;
-        //     for (let wall of walls) {
-        //         const pt = ray.cast(wall);
-        //         if (pt) {
-        //         const d = p5.Vector.dist(this.pos, pt);
-        //         if (d < record) {
-        //             record = d;
-        //             closest = pt;
-        //         }
-        //         }
-        //     }
-        //     if (closest) {
-        //         // colorMode(HSB);
-        //         // stroke((i + frameCount * 2) % 360, 255, 255, 50);
-        //         sk.stroke(255, 100);
-        //         sk.line(this.pos.x, this.pos.y, closest.x, closest.y);
-        //     }
-        //     }
-        // }
+        setOrigin(x, y) {
+            this.origin.x = x;
+            this.origin.y = y;
+        }
 
         show(size) {
             ctx.fillStyle = 'white';
@@ -215,10 +206,11 @@ let hasCache = locationInfo && locationInfo != [];
             ctx.stroke();
             //sk.ellipse(this.pos.x, this.pos.y, size);
 
+            // 每次调用stroke都比较费时间 所以尽量减少stroke次数 多根线段一次画出
             ctx.beginPath();
             ctx.moveTo(this.pos.x, this.pos.y);
             for (let ray of this.rays) {
-                ctx.lineTo(this.pos.x + ray.dir.x * width, this.pos.y + ray.dir.y * width);
+                ctx.lineTo(this.pos.x + ray.dir.x * rayLength, this.pos.y + ray.dir.y * rayLength);
                 ctx.moveTo(this.pos.x, this.pos.y);
                 ray.show();
             }
@@ -234,11 +226,6 @@ let hasCache = locationInfo && locationInfo != [];
             this.dir = {x: Math.cos(angle), y: Math.sin(angle)};
         }
 
-        // lookAt(x, y) {
-        //     this.dir.x = x - this.pos.x;
-        //     this.dir.y = y - this.pos.y;
-        //     this.dir.normalize();
-        // }
 
         rotateBy(delta) {
             this.angle += delta;
@@ -247,31 +234,28 @@ let hasCache = locationInfo && locationInfo != [];
         }
 
         show() {
-            // sk.push();
-            // sk.stroke(255, 50);
-            // sk.translate(this.pos.x, this.pos.y);
-            // const delta = maxRay / raySegs;
-            // for (let i = 0; i < raySegs; i++) {
-            //     sk.stroke(255, (raySegs - i) / raySegs * 100);
-            //     sk.line(this.dir.x * delta * i, this.dir.y * delta * i, this.dir.x * delta * (i+1), this.dir.y * delta * (i+1));
-            //     //sk.translate(this.dir.x * delta, this.dir.y * delta);
-            // }
-            // sk.line(0, 0, this.dir.x * width, this.dir.y * width);
-            // sk.pop();
         }
 
     }
 
+    // 初始化图像用到的数据
     function setup() {
 
         locationInfo.forEach((element, i) => {
             if (i < recentN) {
                 const [y, x] = element.location.coordinates;
-                const x_center = Math.floor(repeat(x / 360 * width, width));
+                const x_center = Math.floor(repeat((x + 160) / 360 * width, width));
                 const y_center = Math.floor((90 - y) / 180 * height);
                 let particle = new Particle();
+                particle.setOrigin(x_center, y_center);
                 particle.update(x_center, y_center);
-                particle.lastTime = element.times[element.times.length - 1];
+
+                // 用IP地址的两段数生成初始运动phase，让每个粒子运动更不规律一些
+                let res = element.ip.split('.');
+                particle.phase1 = parseFloat(res[0]) / 128 * Math.PI;
+                particle.phase2 = parseFloat(res[1]) / 128 * Math.PI;   
+                particle.lastTime = element.times[element.times.length - 1]; // 上一次访问的时间
+                particle.isSelf = element.location.ip == selfIp;
                 particles.push(particle);
 
             }
@@ -280,24 +264,39 @@ let hasCache = locationInfo && locationInfo != [];
     }
 
     function draw () {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, canvas.width, canvas.height); // clearRect让html canvas变透明
 
         // fixed width
-        ctx.lineWidth = 0.5;
-        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.lineWidth = 1.0;
+        ctx.strokeStyle = 'rgba(255,255,255,1)';
 
+        let count = 0;
+        const present = Date.now();
         particles.forEach((particle) => {
-            if (particle.lastTime > now - showTime) {
-                particle.rays.forEach((ray) => {ray.rotateBy(0.0002)});
+            // 只有最近刷新过的才显示
+            if (particle.lastTime > present - showTime || particle.isSelf) {
+                count++;
+                //particle.rays.forEach((ray) => {ray.rotateBy(0.0002)});
 
                 // variable width
-                ctx.lineWidth = 1.0 - (Date.now() - particle.lastTime) / showTime;
+                if (particle.isSelf) 
+                    ctx.lineWidth = overallWidth;
+                else
+                    //ctx.lineWidth = overallWidth * (0.2 + (present - particle.lastTime) / showTime); // 变大
+                    ctx.lineWidth = overallWidth * (1.0 - (present - particle.lastTime) / showTime); // 随时间变小
 
+                let dir = {x: Math.cos(particle.phase1), y: Math.sin(particle.phase1)};
+                let x = particle.origin.x + Math.cos(0.00003 * present + particle.phase2) * dir.x * 50; // 带初始相位的往复运动
+                let y = particle.origin.y + Math.sin(0.00003 * present + particle.phase2) * dir.y * 50;
+                particle.update(x, y);
                 particle.show(4); // particle size
             }
         });
+        if (count == 0) { // 如果一个粒子都不显示，快点刷新
+            setTimeout(() => {window.location = window.location;}, 1500); 
+        }
 
-        requestAnimationFrame(() => {draw();});
+        requestAnimationFrame(() => {draw();}); // 绘图主循环，相当于p5的draw
         
     }
 
@@ -307,7 +306,16 @@ function drawStuffs() {
     setup();
     draw();
     
-    setTimeout(() => {window.location = window.location}, refreshInterval);
+    setTimeout(() => {
+        //for clearing all intervals
+        var interval_id = window.setInterval("", 9999); // Get a reference to the last
+                                                // interval +1
+        for (var i = 1; i < interval_id; i++)
+            clearInterval(i);
+            
+        window.location = window.location;
+    
+    }, refreshInterval);
 }
 
 if (hasCache) {
@@ -328,6 +336,7 @@ axios.post(baseApi + 'getIPList').then(
             Promise.all(
                 newIpList.map(async (ip, idx) => {
                     const resp = await axios.post(baseApi + 'getInfoFromIP', {ip: ip});
+                    resp.data.ip = ip;
                     newLocationInfo.push(resp.data);
                 })
             )
@@ -343,6 +352,31 @@ axios.post(baseApi + 'getIPList').then(
                     drawStuffs();
                 }
             })
+
+            setInterval(() => {
+                const newLocationInfo = [];
+                Promise.all(
+                    newIpList.map(async (ip, idx) => {
+                        const resp = await axios.post(baseApi + 'getInfoFromIP', {ip: ip});
+                        resp.data.ip = ip;
+                        newLocationInfo.push(resp.data);
+                    })
+                )
+                .then(() => {
+                     // sort location info
+                    newLocationInfo.sort((a, b) => {
+                        return b.times[b.times.length - 1] - a.times[a.times.length - 1];
+                    })
+                    sessionStorage.locationInfo = JSON.stringify(newLocationInfo);
+                    locationInfo = newLocationInfo;
+                    locationInfo.forEach((element, i) => {
+                        if (i < recentN) {
+                            particles[i].lastTime = element.times[element.times.length - 1];
+                        }
+                    })
+                })
+
+            }, 1000);
 
             sessionStorage.ipList = JSON.stringify(newIpList);
         }
