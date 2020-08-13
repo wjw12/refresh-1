@@ -115,7 +115,7 @@ const raySegs = 20;
 const recentN = 8;
 const numRays = 180;
 const rayLength = Math.max(width, height);
-const overallWidth = width > height ? 1.1 : 0.75; // 区分一下竖屏的手机，手机显示细一点
+const overallWidth = width > height ? 1.1 : 1.0; // 区分一下竖屏的手机，手机显示细一点
 
 const refreshInterval = 2000 + 5000 * Math.random();
 const showTime = 20000;
@@ -241,22 +241,28 @@ let hasCache = locationInfo && locationInfo != [];
     // 初始化图像用到的数据
     function setup() {
 
+        let visited = new Set();
         locationInfo.forEach((element, i) => {
             if (i < recentN) {
                 const [y, x] = element.location.coordinates;
-                const x_center = Math.floor(repeat((x + 160) / 360 * width, width));
-                const y_center = Math.floor((90 - y) / 180 * height);
-                let particle = new Particle();
-                particle.setOrigin(x_center, y_center);
-                particle.update(x_center, y_center);
+                const key = x * 100000 + y;
+                if (!visited.has(key)) {
+                    visited.add(key);
 
-                // 用IP地址的两段数生成初始运动phase，让每个粒子运动更不规律一些
-                let res = element.ip.split('.');
-                particle.phase1 = parseFloat(res[0]) / 128 * Math.PI;
-                particle.phase2 = parseFloat(res[1]) / 128 * Math.PI;   
-                particle.lastTime = element.times[element.times.length - 1]; // 上一次访问的时间
-                particle.isSelf = element.location.ip == selfIp;
-                particles.push(particle);
+                    const x_center = Math.floor(repeat((x + 160) / 360 * width, width));
+                    const y_center = Math.floor((90 - y) / 180 * height);
+                    let particle = new Particle();
+                    particle.setOrigin(x_center, y_center);
+                    particle.update(x_center, y_center);
+    
+                    particle.phase1 = (x - Math.floor(x)) * Math.PI;
+                    particle.phase2 = (y - Math.floor(y)) * Math.PI;   
+                    particle.lastTime = element.times[element.times.length - 1]; // 上一次访问的时间
+                    particle.isSelf = element.location.ip == selfIp;
+                    particle.ip = element.location.ip;
+                    particles.push(particle);
+                }
+                
 
             }
         })
@@ -275,26 +281,32 @@ let hasCache = locationInfo && locationInfo != [];
         particles.forEach((particle) => {
             // 只有最近刷新过的才显示
             if (particle.lastTime > present - showTime || particle.isSelf) {
-                count++;
-                //particle.rays.forEach((ray) => {ray.rotateBy(0.0002)});
-
-                // variable width
-                if (particle.isSelf) 
-                    ctx.lineWidth = overallWidth;
-                else
-                    //ctx.lineWidth = overallWidth * (0.2 + (present - particle.lastTime) / showTime); // 变大
-                    ctx.lineWidth = overallWidth * (1.0 - (present - particle.lastTime) / showTime); // 随时间变小
-
-                let dir = {x: Math.cos(particle.phase1), y: Math.sin(particle.phase1)};
-                let x = particle.origin.x + Math.cos(0.00003 * present + particle.phase2) * dir.x * 50; // 带初始相位的往复运动
-                let y = particle.origin.y + Math.sin(0.00003 * present + particle.phase2) * dir.y * 50;
-                particle.update(x, y);
-                particle.show(4); // particle size
+                    count++;
+                    //particle.rays.forEach((ray) => {ray.rotateBy(0.0002)});
+    
+                    // variable width
+                    if (particle.isSelf) 
+                        ctx.lineWidth = overallWidth;
+                    else
+                        //ctx.lineWidth = overallWidth * (0.2 + (present - particle.lastTime) / showTime); // 变大
+                        ctx.lineWidth = overallWidth * (1.0 - (present - particle.lastTime) / showTime); // 随时间变小
+    
+                    let dir = {x: Math.cos(particle.phase1), y: Math.sin(particle.phase1)};
+                    let x = particle.origin.x + Math.cos(0.00003 * present + particle.phase2) * dir.x * 50; // 带初始相位的往复运动
+                    let y = particle.origin.y + Math.sin(0.00003 * present + particle.phase2) * dir.y * 50;
+                    particle.update(x, y);
+                    particle.show(4); // particle size
+                
             }
         });
         if (count == 0) { // 如果一个粒子都不显示，快点刷新
             setTimeout(() => {window.location = window.location;}, 1500); 
         }
+
+        // locationInfo.forEach((loc, i) => {
+        //     ctx.fillText(JSON.stringify(loc), 10, 15 * i + 10);
+        // })
+        
 
         requestAnimationFrame(() => {draw();}); // 绘图主循环，相当于p5的draw
         
@@ -312,7 +324,7 @@ function drawStuffs() {
                                                 // interval +1
         for (var i = 1; i < interval_id; i++)
             clearInterval(i);
-            
+
         window.location = window.location;
     
     }, refreshInterval);
@@ -322,7 +334,7 @@ if (hasCache) {
     drawStuffs();
 }
 
-axios.post(baseApi + 'getIPList').then(
+axios.get(baseApi + 'getIPList').then(
     response => {
         const newIpList = response.data;
         console.log(newIpList);
@@ -351,32 +363,45 @@ axios.post(baseApi + 'getIPList').then(
                 if (!hasCache) {
                     drawStuffs();
                 }
+
+
+                setInterval(() => {
+                    const newLocationInfo = [];
+                    Promise.all(
+                        newIpList.map(async (ip, idx) => {
+                            const resp = await axios.post(baseApi + 'getInfoFromIP', {ip: ip});
+                            resp.data.ip = ip;
+                            newLocationInfo.push(resp.data);
+                        })
+                    )
+                    .then(() => {
+                         // sort location info
+                        newLocationInfo.sort((a, b) => {
+                            return b.times[b.times.length - 1] - a.times[a.times.length - 1];
+                        })
+                        sessionStorage.locationInfo = JSON.stringify(newLocationInfo);
+                        locationInfo = newLocationInfo;
+                        let visited = new Set();
+                        let idx = 0;
+                        locationInfo.forEach((element, i) => {
+                            if (i < recentN) {
+                                const [y, x] = element.location.coordinates;
+                                const key = x * 100000 + y;
+                                if (!visited.has(key)) {
+                                    visited.add(key);
+                                    particles[idx].lastTime = element.times[element.times.length - 1];
+                                ++idx;
+                                }
+                                
+                            }
+                            
+                        })
+                    })
+    
+                }, 1000);
             })
 
-            setInterval(() => {
-                const newLocationInfo = [];
-                Promise.all(
-                    newIpList.map(async (ip, idx) => {
-                        const resp = await axios.post(baseApi + 'getInfoFromIP', {ip: ip});
-                        resp.data.ip = ip;
-                        newLocationInfo.push(resp.data);
-                    })
-                )
-                .then(() => {
-                     // sort location info
-                    newLocationInfo.sort((a, b) => {
-                        return b.times[b.times.length - 1] - a.times[a.times.length - 1];
-                    })
-                    sessionStorage.locationInfo = JSON.stringify(newLocationInfo);
-                    locationInfo = newLocationInfo;
-                    locationInfo.forEach((element, i) => {
-                        if (i < recentN) {
-                            particles[i].lastTime = element.times[element.times.length - 1];
-                        }
-                    })
-                })
-
-            }, 1000);
+            
 
             sessionStorage.ipList = JSON.stringify(newIpList);
         }
